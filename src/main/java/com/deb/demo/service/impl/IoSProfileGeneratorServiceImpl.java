@@ -31,16 +31,16 @@ import org.xml.sax.SAXException;
 
 import com.deb.demo.service.ProfileGeneratorService;
 
-@Service(value="androidProfileService")
-
-public class AndroidProfileGeneratorServiceImpl implements ProfileGeneratorService{
+@Service(value="iosProfileService")
+public class IoSProfileGeneratorServiceImpl implements ProfileGeneratorService{
 
 	@Autowired
 	private Environment environment;
 
 	@Override
 	public Resource generateProfile(Map<String, String> nodeValue) throws Exception {
-		try (FileInputStream fileInputStream = new FileInputStream(ResourceUtils.getFile(environment.getProperty("profile.android.file")))){
+		
+		try (FileInputStream fileInputStream = new FileInputStream(ResourceUtils.getFile(environment.getProperty("profile.ios.file")))){
 
 			DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
 			DocumentBuilder builder = builderFactory.newDocumentBuilder();

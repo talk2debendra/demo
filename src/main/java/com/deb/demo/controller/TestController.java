@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.env.Environment;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -26,10 +27,16 @@ public class TestController {
 	
 	
 	@Autowired
-	private ProfileGeneratorService profileGeneratorService;
+	@Qualifier("androidProfileService")
+	private ProfileGeneratorService androidProfileGeneratorService;
+	
+	
+	@Autowired
+	@Qualifier("iosProfileService")
+	private ProfileGeneratorService iosProfileGeneratorService;
 	
 	@GetMapping(produces="application/x-wifi-config")
-	public ResponseEntity<Resource> testDownload(@RequestParam String type) throws Exception{
+	public ResponseEntity<Resource> testDownload() throws Exception{
 		 return ResponseEntity.ok()
 	                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"android.config\"")
 	                .body(xmlFileService.readXML());
@@ -40,9 +47,8 @@ public class TestController {
 	@GetMapping(value="/profile",produces="application/x-wifi-config")
 	public ResponseEntity<Resource> download(@RequestParam String type) throws Exception{
 		
-		
+		Map<String,String> xpathNodeValueMap =new HashMap<>();		
 		if(environment.getProperty("profile.android.name").equalsIgnoreCase(type)){
-			Map<String,String> xpathNodeValueMap =new HashMap<>();
 			xpathNodeValueMap.put(environment.getProperty("profile.android.xpaths.username"),"debendra");
 			xpathNodeValueMap.put(environment.getProperty("profile.android.xpaths.password"),"23d456htyu");
 			xpathNodeValueMap.put(environment.getProperty("profile.android.xpaths.machinemanaged"),"false");
@@ -51,7 +57,15 @@ public class TestController {
 			
 			return ResponseEntity.ok()
 	                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"android.config\"")
-	                .body(profileGeneratorService.generateProfile(xpathNodeValueMap));
+	                .body(androidProfileGeneratorService.generateProfile(xpathNodeValueMap));
+		}if(environment.getProperty("profile.ios.name").equalsIgnoreCase(type)){
+
+			xpathNodeValueMap.put(environment.getProperty("profile.ios.xpaths.username"),"debendra");
+			xpathNodeValueMap.put(environment.getProperty("profile.ios.xpaths.password"),"23d456htyu");
+			
+			return ResponseEntity.ok()
+	                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"ios.config\"")
+	                .body(iosProfileGeneratorService.generateProfile(xpathNodeValueMap));
 		}
 		return ResponseEntity.ok()
 	                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"android.config\"")
