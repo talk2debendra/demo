@@ -13,11 +13,11 @@
         <NodeName>HomeSP</NodeName>
         <Node>
           <NodeName>FQDN</NodeName>
-          <Value>hsc.com</Value>
+          <Value>demo.com</Value>
         </Node>
         <Node>
           <NodeName>FriendlyName</NodeName>
-          <Value>hsc</Value>
+          <Value>demo</Value>
         </Node>
       </Node>
       <Node>
@@ -41,7 +41,7 @@
           </Node>
           <Node>
             <NodeName>Username</NodeName>
-            <Value>appleUser</Value>
+            <Value>androidUser</Value>
           </Node>
           <Node>
             <NodeName>Password</NodeName>
@@ -54,7 +54,7 @@
         </Node>
         <Node>
           <NodeName>Realm</NodeName>
-          <Value>hsc.com</Value>
+          <Value>com.demo</Value>
         </Node>
       </Node>
     </Node>
