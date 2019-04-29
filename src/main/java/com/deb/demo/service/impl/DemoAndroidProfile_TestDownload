@@ -1,0 +1,200 @@
+package com.deb.demo.service.impl;
+
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.BufferedWriter;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
+
+import org.apache.commons.codec.binary.Base64;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
+import org.springframework.stereotype.Service;
+import org.springframework.util.ResourceUtils;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
+
+import com.deb.demo.service.ProfileGeneratorService;
+
+@Service(value="androidProfileService")
+
+public class AndroidProfileGeneratorServiceImpl implements ProfileGeneratorService{
+
+	@Autowired
+	private Environment environment;
+	
+	public static final String PREFIX = "stream2file";
+	public static final String SUFFIX = ".tmp";
+	
+	@Override
+	public Resource generateProfile(Map<String, String> nodeValue) throws Exception {
+		File tempFileForPasspoint = null;
+		try (FileInputStream fileInputStream = new FileInputStream(ResourceUtils.getFile(environment.getProperty("profile.android.file")))){
+			
+			
+			DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder builder = builderFactory.newDocumentBuilder();
+			Document xmlDocument = builder.parse(fileInputStream);
+			
+			XPath xPath = XPathFactory.newInstance().newXPath();
+
+			updateNodeValue(xmlDocument,xPath,nodeValue);
+
+			TransformerFactory transformerFactory = TransformerFactory.newInstance();
+			Transformer transformer = transformerFactory.newTransformer();
+			transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION,"yes");
+			
+			StringWriter writer = new StringWriter();
+			transformer.transform(new DOMSource(xmlDocument), new StreamResult(writer));
+			
+			byte []array=writer.getBuffer().toString().getBytes();
+			writer.close();
+			
+			byte[] xmlUpdated = Base64.encodeBase64(array, true);
+			String encodedMime = new String(xmlUpdated, StandardCharsets.UTF_8);
+			
+			tempFileForPasspoint = File.createTempFile("tempfilePPS", ".txt");
+			tempFileForPasspoint = writeAdditionalData(encodedMime);
+			
+			
+			int length = (int) tempFileForPasspoint.length();
+			BufferedInputStream reader = new BufferedInputStream(new FileInputStream(tempFileForPasspoint));
+			byte[] bytes = new byte[length];
+			reader.read(bytes, 0, length);
+			reader.close();
+
+			byte[] base64EncodedData = Base64.encodeBase64(bytes, true);
+			
+			tempFileForPasspoint.deleteOnExit();
+			
+			return new ByteArrayResource(base64EncodedData);
+			//return new ByteArrayResource(Files.readAllBytes(Paths.get(tempFileForPasspoint.getAbsolutePath())));			
+
+		} catch (ParserConfigurationException | SAXException | IOException e) {
+			e.printStackTrace();
+		}finally {
+			tempFileForPasspoint.deleteOnExit();
+		}
+		return null;
+	}
+
+	private File writeAdditionalData(String xml) throws Exception {
+		String headers =
+				"Content-Type: multipart/mixed; boundary={boundary}\r\n"
+						+ "Content-Transfer-Encoding: base64\n"
+						+ "\r\n--{boundary}\r\n"
+						+ "Content-Type: application/x-passpoint-profile\r\n"
+						+ "Content-Transfer-Encoding: base64\r\n";
+
+		String CertHeader = "\r\n--{boundary}\r\n"
+				+ "Content-Type: application/x-x509-ca-cert\r\n"
+				+ "Content-Transfer-Encoding: base64\r\n";
+		String LastBoundry = "--{boundary}--\r\n";
+
+		String certificate =
+				"MIIDrzCCApegAwIBAgIQCDvgVpBCRrGhdWrJWZHHSjANBgkqhkiG9w0BAQUFADBh\n"
+						+ "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n"
+						+ "d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBD\n"
+						+ "QTAeFw0wNjExMTAwMDAwMDBaFw0zMTExMTAwMDAwMDBaMGExCzAJBgNVBAYTAlVT\n"
+						+ "MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j\n"
+						+ "b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IENBMIIBIjANBgkqhkiG\n"
+						+ "9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4jvhEXLeqKTTo1eqUKKPC3eQyaKl7hLOllsB\n"
+						+ "CSDMAZOnTjC3U/dDxGkAV53ijSLdhwZAAIEJzs4bg7/fzTtxRuLWZscFs3YnFo97\n"
+						+ "nh6Vfe63SKMI2tavegw5BmV/Sl0fvBf4q77uKNd0f3p4mVmFaG5cIzJLv07A6Fpt\n"
+						+ "43C/dxC//AH2hdmoRBBYMql1GNXRor5H4idq9Joz+EkIYIvUX7Q6hL+hqkpMfT7P\n"
+						+ "T19sdl6gSzeRntwi5m3OFBqOasv+zbMUZBfHWymeMr/y7vrTC0LUq7dBMtoM1O/4\n"
+						+ "gdW7jVg/tRvoSSiicNoxBN33shbyTApOB6jtSj1etX+jkMOvJwIDAQABo2MwYTAO\n"
+						+ "BgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUA95QNVbR\n"
+						+ "TLtm8KPiGxvDl7I90VUwHwYDVR0jBBgwFoAUA95QNVbRTLtm8KPiGxvDl7I90VUw\n"
+						+ "DQYJKoZIhvcNAQEFBQADggEBAMucN6pIExIK+t1EnE9SsPTfrgT1eXkIoyQY/Esr\n"
+						+ "hMAtudXH/vTBH1jLuG2cenTnmCmrEbXjcKChzUyImZOMkXDiqw8cvpOp/2PV5Adg\n"
+						+ "06O/nVsJ8dWO41P0jmP6P6fbtGbfYmbW0W5BjfIttep3Sp+dWOIrWcBAI+0tKIJF\n"
+						+ "PnlUkiaY4IBIqDfv8NZ5YBberOgOzW6sRBc4L0na4UU+Krk2U886UAb3LujEV0ls\n"
+						+ "YSEY1QSteDwsOoBrp+uvFRTp2InBuThs4pFsiv9kuXclVzDAGySj4dzp30d8tbQk\n"
+						+ "CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=\r\n";
+
+		final File tempFile = File.createTempFile(PREFIX, SUFFIX);
+
+		BufferedWriter buffWriter = null;
+		FileWriter fwriter = null;
+
+		try {
+
+			if (!tempFile.exists()) {
+				tempFile.createNewFile();
+			}
+
+			fwriter = new FileWriter(tempFile.getAbsoluteFile(), true);
+			buffWriter = new BufferedWriter(fwriter);
+
+			buffWriter.write(headers);
+			buffWriter.append("\r\n");
+			buffWriter.append(xml);
+			buffWriter.append("\r\n");
+			buffWriter.append(CertHeader);
+			buffWriter.append("\r\n");
+			buffWriter.append(certificate);
+			buffWriter.append(LastBoundry);
+
+			tempFile.deleteOnExit();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				if (buffWriter != null)
+					buffWriter.close();
+
+				if (fwriter != null)
+					fwriter.close();
+				tempFile.deleteOnExit();
+			} catch (IOException ex) {
+
+				ex.printStackTrace();
+
+			}
+		}
+		return tempFile;
+	}
+
+	private void updateNodeValue(Document doc, XPath xpath,Map<String,String> nodeValue) {
+		nodeValue.forEach((k, v) -> {
+			try {
+				XPathExpression expression = xpath.compile(k);
+				NodeList nodes = (NodeList) expression.evaluate(doc, XPathConstants.NODESET);
+				for (int i = 0; i < nodes.getLength(); i++){
+					Node node=nodes.item(i);
+					node.setNodeValue(v);
+				}
+			} catch (XPathExpressionException e) {
+				e.printStackTrace();
+			}				
+		});
+	}
+
+
+}
