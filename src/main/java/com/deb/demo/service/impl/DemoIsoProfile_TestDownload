@@ -1,0 +1,151 @@
+package com.deb.demo.service.impl;
+
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.StringWriter;
+import java.util.Map;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
+import org.springframework.stereotype.Service;
+import org.springframework.util.ResourceUtils;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
+
+import com.deb.demo.service.ProfileGeneratorService;
+
+@Service(value="iosProfileService")
+public class IoSProfileGeneratorServiceImpl implements ProfileGeneratorService{
+
+	@Autowired
+	private Environment environment;
+
+	String header = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
+	String doctype ="<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">";
+
+
+	@Override
+	public Resource generateProfile(Map<String, String> nodeValue) throws Exception {
+
+		try (FileInputStream fileInputStream = new FileInputStream(ResourceUtils.getFile(environment.getProperty("profile.ios.file")))){
+
+			DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder builder = builderFactory.newDocumentBuilder();
+			Document xmlDocument = builder.parse(fileInputStream);
+
+			XPath xPath = XPathFactory.newInstance().newXPath();
+
+			updateNodeValue(xmlDocument,xPath,nodeValue);
+
+			TransformerFactory transformerFactory = TransformerFactory.newInstance();
+			Transformer transformer = transformerFactory.newTransformer();
+			transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION,"yes");
+
+			StringWriter writer = new StringWriter();
+			transformer.transform(new DOMSource(xmlDocument), new StreamResult(writer));
+
+
+
+			final File tempFileForIosParsing =File.createTempFile("iosPpsmo", ".xml");
+			if (!tempFileForIosParsing.exists()) {
+				tempFileForIosParsing.createNewFile();
+			}
+			FileWriter fileWriter;
+			BufferedWriter bufferWriter = null;
+			fileWriter = new FileWriter(tempFileForIosParsing.getAbsoluteFile(),true);
+			bufferWriter = new BufferedWriter(fileWriter);
+
+			bufferWriter.append(header);
+			bufferWriter.append("\r\n");
+			bufferWriter.append(doctype);
+			bufferWriter.append("\r\n");
+			bufferWriter.append(writer.getBuffer().toString());
+
+			/*DOMSource source = new DOMSource(xmlDocument);
+			ByteArrayOutputStream bos=new ByteArrayOutputStream();
+			StreamResult result=new StreamResult(bos);
+
+			transformer.transform(source, result);
+			byte []array=bos.toByteArray();*/
+			if (bufferWriter != null)
+				bufferWriter.close();
+
+			if (fileWriter != null)
+				fileWriter.close();
+
+
+
+			return new ByteArrayResource(readBytesFromFile(tempFileForIosParsing.getAbsolutePath()));			
+
+		} catch (ParserConfigurationException | SAXException | IOException e) {
+			e.printStackTrace();
+		}
+		return null;
+	}
+
+	private void updateNodeValue(Document doc, XPath xpath,Map<String,String> nodeValue) {
+		nodeValue.forEach((k, v) -> {
+			try {
+				XPathExpression expression = xpath.compile(k);
+				NodeList nodes = (NodeList) expression.evaluate(doc, XPathConstants.NODESET);
+				for (int i = 0; i < nodes.getLength(); i++){
+					Node node=nodes.item(i);
+					node.setNodeValue(v);
+				}
+			} catch (XPathExpressionException e) {
+				e.printStackTrace();
+			}				
+		});
+	}
+	private static byte[] readBytesFromFile(String filePath) {
+
+		FileInputStream fileInputStream = null;
+		byte[] bytesArray = null;
+
+		try {
+
+			File file = new File(filePath);
+			bytesArray = new byte[(int) file.length()];
+
+			//read file into bytes[]
+			fileInputStream = new FileInputStream(file);
+			fileInputStream.read(bytesArray);
+
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			if (fileInputStream != null) {
+				try {
+					fileInputStream.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+
+		}
+
+		return bytesArray;
+
+	}
+}
