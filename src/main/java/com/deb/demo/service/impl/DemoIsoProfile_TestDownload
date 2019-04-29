@@ -1,6 +1,7 @@
 package com.deb.demo.service.impl;
 
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileWriter;
@@ -28,7 +29,9 @@ import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.ResourceUtils;
+import org.w3c.dom.DOMImplementation;
 import org.w3c.dom.Document;
+import org.w3c.dom.DocumentType;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
@@ -64,8 +67,6 @@ public class IoSProfileGeneratorServiceImpl implements ProfileGeneratorService{
 
 			StringWriter writer = new StringWriter();
 			transformer.transform(new DOMSource(xmlDocument), new StreamResult(writer));
-
-
 
 			final File tempFileForIosParsing =File.createTempFile("iosPpsmo", ".xml");
 			if (!tempFileForIosParsing.exists()) {
@@ -103,6 +104,59 @@ public class IoSProfileGeneratorServiceImpl implements ProfileGeneratorService{
 		}
 		return null;
 	}
+
+
+
+	@Override
+	public Resource generateProfileOptimized(Map<String, String> nodeValue) throws Exception {
+
+		try (FileInputStream fileInputStream = new FileInputStream(ResourceUtils.getFile(environment.getProperty("profile.ios.file")))){
+
+			DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder builder = builderFactory.newDocumentBuilder();
+			Document xmlDocument = builder.parse(fileInputStream);
+			
+			xmlDocument.normalize();
+			xmlDocument.setXmlStandalone(true);
+			
+			XPath xPath = XPathFactory.newInstance().newXPath();
+
+			updateNodeValue(xmlDocument,xPath,nodeValue);
+			
+			xmlDocument.setXmlVersion("1.0");
+			
+			
+			DOMImplementation domImpl = xmlDocument.getImplementation();
+			DocumentType customDocType = domImpl.createDocumentType("doctype","-//Apple//DTD PLIST 1.0//EN","http://www.apple.com/DTDs/PropertyList-1.0.dtd");
+			
+			
+			Transformer transformer = TransformerFactory.newInstance().newTransformer();
+			transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION,"no");
+			transformer.setOutputProperty(OutputKeys.DOCTYPE_PUBLIC, customDocType.getPublicId());
+			transformer.setOutputProperty(OutputKeys.DOCTYPE_SYSTEM,customDocType.getSystemId());
+			transformer.setOutputProperty(OutputKeys.ENCODING,"UTF-8");
+			
+			ByteArrayOutputStream bos=new ByteArrayOutputStream();
+			DOMSource source = new DOMSource(xmlDocument);
+			StreamResult result = new StreamResult(bos);
+			transformer.transform(source, result);
+			
+			return new ByteArrayResource(bos.toByteArray());			
+
+		} catch (ParserConfigurationException | SAXException | IOException e) {
+			e.printStackTrace();
+		}
+		return null;
+	}
+
+
+
+
+
+
+
+
+
 
 	private void updateNodeValue(Document doc, XPath xpath,Map<String,String> nodeValue) {
 		nodeValue.forEach((k, v) -> {
